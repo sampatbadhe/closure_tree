@@ -175,5 +175,101 @@ class ScopeTest < ActiveSupport::TestCase
     assert_equal [:user_id], ScopedItem._ct.scope_columns
     assert_equal [:user_id, :group_id], MultiScopedItem._ct.scope_columns
   end
+
+  def test_updating_scope_attribute_rebuilds_tree
+    parent = ScopedItem.create!(name: 'parent', user_id: 1)
+    child = parent.children.create!(name: 'child', user_id: 1)
+    grandchild = child.children.create!(name: 'grandchild', user_id: 1)
+
+    # Verify initial tree structure
+    assert_equal parent, child.parent
+    assert_equal 2, parent.descendant_ids.count
+    assert_includes parent.descendant_ids, child.id
+    assert_includes parent.descendant_ids, grandchild.id
+
+    # Update scope attribute
+    child.update!(user_id: 2)
+
+    # Reload to get fresh data
+    parent.reload
+    child.reload
+    grandchild.reload
+
+    # Child should now be in a different scope tree
+    assert_nil child.parent
+    assert_equal 1, parent.descendant_ids.count
+    assert_includes parent.descendant_ids, grandchild.id
+    refute_includes parent.descendant_ids, child.id
+
+    # Child should be a root in the new scope
+    assert child.root?
+  end
+
+  def test_updating_multiple_scope_attributes_rebuilds_tree
+    parent = MultiScopedItem.create!(name: 'parent', user_id: 1, group_id: 10)
+    child = parent.children.create!(name: 'child', user_id: 1, group_id: 10)
+    grandchild = child.children.create!(name: 'grandchild', user_id: 1, group_id: 10)
+
+    # Verify initial tree structure
+    assert_equal parent, child.parent
+    assert_equal 2, parent.descendant_ids.count
+    assert_includes parent.descendant_ids, child.id
+    assert_includes parent.descendant_ids, grandchild.id
+
+    # Update one scope attribute
+    child.update!(user_id: 2)
+
+    parent.reload
+    child.reload
+    grandchild.reload
+
+    # Child should now be in a different scope tree
+    assert_nil child.parent
+    assert child.root?
+    assert_equal 1, parent.descendant_ids.count
+    refute_includes parent.descendant_ids, child.id
+
+    # Reset for next test
+    child.update!(user_id: 1, parent_id: parent.id)
+    child.reload
+    parent.reload
+
+    # Update the other scope attribute
+    child.update!(group_id: 20)
+
+    parent.reload
+    child.reload
+
+    # Child should again be in a different scope tree
+    assert_nil child.parent
+    assert child.root?
+  end
+
+  def test_scope_change_maintains_order_values
+    parent = ScopedItem.create!(name: 'parent', user_id: 1)
+    child1 = parent.children.create!(name: 'child1', user_id: 1)
+    child2 = parent.children.create!(name: 'child2', user_id: 1)
+    child3 = parent.children.create!(name: 'child3', user_id: 1)
+
+    # Verify initial order
+    assert_equal 0, child1.order_value
+    assert_equal 1, child2.order_value
+    assert_equal 2, child3.order_value
+
+    # Change scope of middle child
+    child2.update!(user_id: 2)
+
+    child1.reload
+    child2.reload
+    child3.reload
+    parent.reload
+
+    # Remaining siblings should be reordered
+    assert_equal 0, child1.order_value
+    assert_equal 1, child3.order_value
+
+    # Moved child should have its own order in new scope
+    assert_equal 0, child2.order_value
+  end
 end
 

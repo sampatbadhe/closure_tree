@@ -38,8 +38,9 @@ module ClosureTree
     end
 
     def _ct_after_save
-      rebuild! if saved_changes[_ct.parent_column_name] || @was_new_record
-      if saved_changes[_ct.parent_column_name] && !@was_new_record
+      scope_changed = _ct_scope_changed?
+      rebuild! if saved_changes[_ct.parent_column_name] || scope_changed || @was_new_record
+      if (saved_changes[_ct.parent_column_name] || scope_changed) && !@was_new_record
         # Resetting the ancestral collections addresses
         # https://github.com/mceachen/closure_tree/issues/68
         ancestor_hierarchies.reload
@@ -48,6 +49,12 @@ module ClosureTree
       @was_new_record = false # we aren't new anymore.
       @_ct_skip_sort_order_maintenance = false # only skip once.
       true # don't cancel anything.
+    end
+
+    def _ct_scope_changed?
+      return false unless _ct.options[:scope]
+
+      _ct.scope_columns.any? { |col| saved_changes.key?(col.to_s) }
     end
 
     def _ct_before_destroy
