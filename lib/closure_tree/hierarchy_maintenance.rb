@@ -34,6 +34,10 @@ module ClosureTree
 
     def _ct_before_save
       @was_new_record = new_record?
+      # Store old scope values before save for reordering siblings in old scope
+      if _ct.options[:scope] && !new_record?
+        @_ct_old_scope_values = _ct.scope_values_from_instance(self)
+      end
       true # don't cancel the save
     end
 
@@ -48,6 +52,7 @@ module ClosureTree
       end
       @was_new_record = false # we aren't new anymore.
       @_ct_skip_sort_order_maintenance = false # only skip once.
+      @_ct_old_scope_values = nil # clear old scope values after use.
       true # don't cancel anything.
     end
 

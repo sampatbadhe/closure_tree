@@ -12,10 +12,20 @@ module ClosureTree
     end
 
     def _ct_reorder_prior_siblings_if_parent_changed
-      return unless saved_change_to_attribute?(_ct.parent_column_name) && !@was_new_record
+      return if @was_new_record
 
-      was_parent_id = attribute_before_last_save(_ct.parent_column_name)
-      scope_conditions = _ct.scope_values_from_instance(self)
+      parent_changed = saved_change_to_attribute?(_ct.parent_column_name)
+      scope_changed = defined?(@_ct_old_scope_values) && @_ct_old_scope_values.present?
+
+      return unless parent_changed || scope_changed
+
+      # Use the old parent_id to reorder siblings in the previous tree
+      # If parent changed, use the old parent; otherwise use current parent (which hasn't changed)
+      was_parent_id = parent_changed ? attribute_before_last_save(_ct.parent_column_name) : _ct_parent_id
+
+      # If scope changed, use old scope values; otherwise use current scope
+      scope_conditions = scope_changed ? @_ct_old_scope_values : _ct.scope_values_from_instance(self)
+
       _ct.reorder_with_parent_id(was_parent_id, nil, scope_conditions)
     end
 
